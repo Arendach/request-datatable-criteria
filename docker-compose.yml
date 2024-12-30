@@ -1,0 +1,11 @@
+services:
+  php:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    volumes:
+      - .:/arendach-request-datatable-criteria
+      - ~/.composer:/tmp/composer # Кеш Composer
+    working_dir: /arendach-request-datatable-criteria
+    stdin_open: true
+    tty: true

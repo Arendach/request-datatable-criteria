@@ -1,0 +1,34 @@
+{
+    "name": "arendach/request-datatable-criteria",
+    "description": "Package for integration with ares-datatable vue 3 component",
+    "type": "library",
+    "require": {
+        "prettus/l5-repository": "^2.9"
+    },
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Arendach\\RequestDatatableCriteria\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Arendach\\RequestDatatableCriteria\\Tests\\": "tests/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Arendach Taras"
+        }
+    ],
+    "minimum-stability": "dev",
+    "require-dev": {
+        "phpunit/phpunit": "10.5.x-dev"
+    },
+    "repositories": {
+        "local": {
+            "type": "path",
+            "url": "/var/www/request-datatable-criteria"
+        }
+    }
+}

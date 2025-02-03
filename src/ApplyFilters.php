@@ -9,7 +9,7 @@ trait ApplyFilters
 {
     protected function applyFilters(): void
     {
-        $this->model = $this->model->where(function ($query) {
+        $this->builder = $this->builder->where(function ($query) {
             /** @var Builder $query */
 
             foreach ($this->filters as $filter) {
@@ -17,7 +17,7 @@ trait ApplyFilters
                 $condition = $filter['condition'];
                 $value = $filter['value'];
 
-                $cast = $this->original->getCasts()[$field] ?? null;
+                $cast = $this->model->getCasts()[$field] ?? null;
 
                 $fieldParts = explode('.', $field);
 
@@ -56,13 +56,13 @@ trait ApplyFilters
         $relation = array_shift($fieldParts); // Перше значення - це назва відносини (наприклад, 'author')
         $column = array_pop($fieldParts); // Останнє значення - це поле для фільтрації (наприклад, 'is_europe')
 
-        if (!method_exists($this->original, $relation)) {
+        if (!method_exists($this->model, $relation)) {
             return; // Якщо зв’язок не знайдено - виходимо
         }
 
         // Починаємо з першого рівня зв’язку
-        $relationInstance = $this->original->{$relation}();
-        $previousTable = $this->original->getTable();
+        $relationInstance = $this->model->{$relation}();
+        $previousTable = $this->model->getTable();
         $previousKey = $relationInstance->getForeignKeyName();
         $relatedModel = $relationInstance->getRelated();
 
@@ -78,7 +78,7 @@ trait ApplyFilters
             $foreignKey = $relationInstance->getForeignKeyName();
 
             // Додаємо LEFT JOIN між попередньою і поточною таблицею
-            $this->model = $this->model->leftJoin(
+            $this->builder = $this->builder->leftJoin(
                 $relatedTable,
                 "$previousTable.$previousKey",
                 '=',

@@ -22,10 +22,9 @@ class RequestDatatableCriteria implements CriteriaInterface
     protected ?string $sortDirection;
     protected ?string $with;
     protected ?string $withCount;
-    protected ?string $searchJoin;
     protected RepositoryInterface $repository;
+    protected $builder;
     protected $model;
-    protected $original;
 
     public function __construct(Request $request)
     {
@@ -36,7 +35,6 @@ class RequestDatatableCriteria implements CriteriaInterface
         $this->sortDirection = $this->request->get('sortDirection');
         $this->with = $this->request->get('with');
         $this->withCount = $this->request->get('withCount');
-        $this->searchJoin = $this->request->get('searchJoin', 'and');
     }
 
     /** @param Builder|Model $model * */
@@ -44,7 +42,7 @@ class RequestDatatableCriteria implements CriteriaInterface
     {
         $this->repository = $repository;
         $this->model = $model;
-        $this->original = $model;
+        $this->builder = $model;
 
         $this->applySearch();
 
@@ -56,6 +54,6 @@ class RequestDatatableCriteria implements CriteriaInterface
 
         $this->applyOrder();
 
-        return $this->model;
+        return $this->builder;
     }
 }

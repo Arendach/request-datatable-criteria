@@ -10,7 +10,7 @@ trait ApplyWith
         if (!$this->with) return;
 
         $with = explode(';', $this->with);
-        $this->model = $this->model->with($with);
+        $this->builder = $this->builder->with($with);
     }
 
     protected function applyWithCount(): void
@@ -18,6 +18,6 @@ trait ApplyWith
         if (!$this->withCount) return;
 
         $withCount = explode(';', $this->withCount);
-        $this->model = $this->model->withCount($withCount);
+        $this->builder = $this->builder->withCount($withCount);
     }
 }

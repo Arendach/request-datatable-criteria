@@ -18,7 +18,7 @@ trait ApplyOrder
 
         if (count($sortParts) === 1) {
             // Якщо сортування йде по основній таблиці
-            $this->model = $this->model->orderBy($this->sortColumn, $this->sortDirection);
+            $this->builder = $this->builder->orderBy($this->sortColumn, $this->sortDirection);
         } else {
             // Обробка вкладених зв'язків
             $this->applyRelationOrder($sortParts, $this->sortDirection);
@@ -37,7 +37,7 @@ trait ApplyOrder
         $column = end($sortParts); // Останнє значення - це поле для сортування (наприклад, 'name')
 
         // Отримуємо визначення зв'язку в моделі
-        $relationInstance = $this->original->{$relation}();
+        $relationInstance = $this->model->{$relation}();
 
         if ($relationInstance instanceof BelongsTo) {
             // Для зв'язків типу BelongsTo (наприклад, author.name)
@@ -45,16 +45,16 @@ trait ApplyOrder
             $relatedTable = $relationInstance->getRelated()->getTable(); // отримуємо ім'я таблиці зв'язку
 
             // Додаємо join для таблиці зв'язку
-            $this->model = $this->model
-                ->leftJoin($relatedTable, $this->original->getTable() . '.' . $foreignKey, '=', "$relatedTable.id")
+            $this->builder = $this->builder
+                ->leftJoin($relatedTable, $this->model->getTable() . '.' . $foreignKey, '=', "$relatedTable.id")
                 ->orderBy("$relatedTable.$column", $direction);
         } elseif ($relationInstance instanceof HasOne) {
             // Для зв'язків типу HasOne (наприклад, profile.city)
             $foreignKey = $relationInstance->getForeignKeyName();
             $relatedTable = $relationInstance->getRelated()->getTable();
 
-            $this->model = $this->model
-                ->leftJoin($relatedTable, "$relatedTable.$foreignKey", '=', $this->original->getTable() . '.id')
+            $this->builder = $this->builder
+                ->leftJoin($relatedTable, "$relatedTable.$foreignKey", '=', $this->model->getTable() . '.id')
                 ->orderBy("$relatedTable.$column", $direction);
         }
     }

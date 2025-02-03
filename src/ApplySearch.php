@@ -11,7 +11,7 @@ trait ApplySearch
     {
         if (!$this->search) return;
 
-        $this->model = $this->model->where(function (Builder $query) {
+        $this->builder = $this->builder->where(function (Builder $query) {
             $fieldsSearchable = $this->repository->getFieldsSearchable();
 
             foreach ($fieldsSearchable as $field => $condition) {

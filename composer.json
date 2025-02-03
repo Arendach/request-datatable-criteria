@@ -3,6 +3,7 @@
     "description": "Package for integration with ares-datatable vue 3 component",
     "type": "library",
     "require": {
+        "php": "^8.0",
         "prettus/l5-repository": "^2.9"
     },
     "license": "MIT",

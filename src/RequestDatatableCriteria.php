@@ -2,11 +2,9 @@
 
 namespace Arendach\RequestDatatableCriteria;
 
-use Exception;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Prettus\Repository\Contracts\CriteriaInterface;
 use Prettus\Repository\Contracts\RepositoryInterface;
 
@@ -15,315 +13,134 @@ class RequestDatatableCriteria implements CriteriaInterface
     /** @var Request */
     protected $request;
 
+    private ?string $search;
+    private array $filters;
+    private ?string $sortColumn;
+    private ?string $sortDirection;
+    private ?string $with;
+    private ?string $withCount;
+    private ?string $searchJoin;
+    private ?string $select;
+    private RepositoryInterface $repository;
+    private $model;
+    private array $casts = [];
+    private ?int $limit;
+
     public function __construct(Request $request)
     {
         $this->request = $request;
+        $this->search = $this->request->get('search');
+        $this->filters = $this->request->get('filters', []);
+        $this->sortColumn = $this->request->get('sortColumn');
+        $this->sortDirection = $this->request->get('sortDirection');
+        $this->with = $this->request->get('with');
+        $this->withCount = $this->request->get('withCount');
+        $this->searchJoin = $this->request->get('searchJoin', 'and');
+        $this->select = $this->request->get('select');
+        $this->limit = $this->request->get('limit', 10);
     }
 
-
-    /**
-     * Apply criteria in query repository
-     *
-     * @param Builder|Model $model
-     * @param RepositoryInterface $repository
-     *
-     * @return mixed
-     * @throws Exception
-     */
+    /** @param Builder|Model $model * */
     public function apply($model, RepositoryInterface $repository)
     {
-        $fieldsSearchable = $repository->getFieldsSearchable();
-        $search = $this->request->get(config('repository.criteria.params.search', 'search'), null);
-        $searchFields = $this->request->get(config('repository.criteria.params.searchFields', 'searchFields'), null);
-        $filter = $this->request->get(config('repository.criteria.params.filter', 'filter'), null);
-        $orderBy = $this->request->get(config('repository.criteria.params.orderBy', 'orderBy'), null);
-        $sortedBy = $this->request->get(config('repository.criteria.params.sortedBy', 'sortedBy'), 'asc');
-        $with = $this->request->get(config('repository.criteria.params.with', 'with'), null);
-        $withCount = $this->request->get(config('repository.criteria.params.withCount', 'withCount'), null);
-        $searchJoin = $this->request->get(config('repository.criteria.params.searchJoin', 'searchJoin'), null);
-        $sortedBy = !empty($sortedBy) ? $sortedBy : 'asc';
+        $this->repository = $repository;
+        $this->model = $model;
 
-        if ($search && is_array($fieldsSearchable) && count($fieldsSearchable)) {
+        $this->casts = $this->model->getCasts();
 
-            $searchFields = is_array($searchFields) || is_null($searchFields) ? $searchFields : explode(';', $searchFields);
-            $isFirstField = true;
-            $searchData = $this->parserSearchData($search);
-            $fields = $this->parserFieldsSearch($fieldsSearchable, $searchFields, array_keys($searchData));
-            $search = $this->parserSearchValue($search);
-            $modelForceAndWhere = strtolower($searchJoin) === 'and';
+        $this->applySearch();
 
-            $model = $model->where(function ($query) use ($fields, $search, $searchData, $isFirstField, $modelForceAndWhere) {
-                /** @var Builder $query */
+        $this->applyWith();
 
-                foreach ($fields as $field => $condition) {
+        $this->applyWithCount();
 
-                    if (is_numeric($field)) {
-                        $field = $condition;
-                        $condition = "=";
-                    }
+        $this->applyFilters();
 
-                    $value = null;
+        $this->applyOrder();
 
-                    $condition = trim(strtolower($condition));
+        $this->applySelect();
 
-                    if (isset($searchData[$field])) {
-                        $value = ($condition == "like" || $condition == "ilike") ? "%{$searchData[$field]}%" : $searchData[$field];
-                    } else {
-                        if (!is_null($search) && !in_array($condition, ['in', 'between'])) {
-                            $value = ($condition == "like" || $condition == "ilike") ? "%{$search}%" : $search;
-                        }
-                    }
+        $this->applyLimit();
 
-                    $relation = null;
-                    if (stripos($field, '.')) {
-                        $explode = explode('.', $field);
-                        $field = array_pop($explode);
-                        $relation = implode('.', $explode);
-                    }
-                    if ($condition === 'in') {
-                        $value = explode(',', $value);
-                        if (trim($value[0]) === "" || $field == $value[0]) {
-                            $value = null;
-                        }
-                    }
-                    if ($condition === 'between') {
-                        $value = explode(',', $value);
-                        if (count($value) < 2) {
-                            $value = null;
-                        }
-                    }
-                    $modelTableName = $query->getModel()->getTable();
-                    if ($isFirstField || $modelForceAndWhere) {
-                        if (!is_null($value)) {
-                            if (!is_null($relation)) {
-                                $query->whereHas($relation, function ($query) use ($field, $condition, $value) {
-                                    if ($condition === 'in') {
-                                        $query->whereIn($field, $value);
-                                    } elseif ($condition === 'between') {
-                                        $query->whereBetween($field, $value);
-                                    } else {
-                                        $query->where($field, $condition, $value);
-                                    }
-                                });
-                            } else {
-                                if ($condition === 'in') {
-                                    $query->whereIn($modelTableName . '.' . $field, $value);
-                                } elseif ($condition === 'between') {
-                                    $query->whereBetween($modelTableName . '.' . $field, $value);
-                                } else {
-                                    $query->where($modelTableName . '.' . $field, $condition, $value);
-                                }
-                            }
-                            $isFirstField = false;
-                        }
-                    } else {
-                        if (!is_null($value)) {
-                            if (!is_null($relation)) {
-                                $query->orWhereHas($relation, function ($query) use ($field, $condition, $value) {
-                                    if ($condition === 'in') {
-                                        $query->whereIn($field, $value);
-                                    } elseif ($condition === 'between') {
-                                        $query->whereBetween($field, $value);
-                                    } else {
-                                        $query->where($field, $condition, $value);
-                                    }
-                                });
-                            } else {
-                                if ($condition === 'in') {
-                                    $query->orWhereIn($modelTableName . '.' . $field, $value);
-                                } elseif ($condition === 'between') {
-                                    $query->whereBetween($modelTableName . '.' . $field, $value);
-                                } else {
-                                    $query->orWhere($modelTableName . '.' . $field, $condition, $value);
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        if (isset($orderBy) && !empty($orderBy)) {
-            $orderBySplit = explode(';', $orderBy);
-            if (count($orderBySplit) > 1) {
-                $sortedBySplit = explode(';', $sortedBy);
-                foreach ($orderBySplit as $orderBySplitItemKey => $orderBySplitItem) {
-                    $sortedBy = isset($sortedBySplit[$orderBySplitItemKey]) ? $sortedBySplit[$orderBySplitItemKey] : $sortedBySplit[0];
-                    $model = $this->parserFieldsOrderBy($model, $orderBySplitItem, $sortedBy);
-                }
-            } else {
-                $model = $this->parserFieldsOrderBy($model, $orderBySplit[0], $sortedBy);
-            }
-        }
-
-        if (isset($filter) && !empty($filter)) {
-            if (is_string($filter)) {
-                $filter = explode(';', $filter);
-            }
-
-            $model = $model->select($filter);
-        }
-
-        if ($with) {
-            $with = explode(';', $with);
-            $model = $model->with($with);
-        }
-
-        if ($withCount) {
-            $withCount = explode(';', $withCount);
-            $model = $model->withCount($withCount);
-        }
-
-        return $model;
+        return $this->model;
     }
 
-    /**
-     * @param $model
-     * @param $orderBy
-     * @param $sortedBy
-     * @return mixed
-     */
-    protected function parserFieldsOrderBy($model, $orderBy, $sortedBy)
+    // add ->where condition
+    private function applySearch(): void
     {
-        $split = explode('|', $orderBy);
-        if (count($split) > 1) {
-            /*
-             * ex.
-             * products|description -> join products on current_table.product_id = products.id order by description
-             *
-             * products:custom_id|products.description -> join products on current_table.custom_id = products.id order
-             * by products.description (in case both tables have same column name)
-             */
-            $table = $model->getModel()->getTable();
-            $sortTable = $split[0];
-            $sortColumn = $split[1];
+        $this->model->where(function (Builder $query) {
+            $fieldsSearchable = $this->repository->getFieldsSearchable();
 
-            $split = explode(':', $sortTable);
-            $localKey = '.id';
-            if (count($split) > 1) {
-                $sortTable = $split[0];
-
-                $commaExp = explode(',', $split[1]);
-                $keyName = $table . '.' . $split[1];
-                if (count($commaExp) > 1) {
-                    $keyName = $table . '.' . $commaExp[0];
-                    $localKey = '.' . $commaExp[1];
-                }
-            } else {
-                /*
-                 * If you do not define which column to use as a joining column on current table, it will
-                 * use a singular of a join table appended with _id
-                 *
-                 * ex.
-                 * products -> product_id
-                 */
-                $prefix = Str::singular($sortTable);
-                $keyName = $table . '.' . $prefix . '_id';
+            foreach ($fieldsSearchable as $field) {
+                $query->where($field, 'like', '%' . $this->search . '%');
             }
-
-            $model = $model
-                ->leftJoin($sortTable, $keyName, '=', $sortTable . $localKey)
-                ->orderBy($sortColumn, $sortedBy)
-                ->addSelect($table . '.*');
-        } else {
-            $model = $model->orderBy($orderBy, $sortedBy);
-        }
-        return $model;
+        });
     }
 
-    /**
-     * @param $search
-     *
-     * @return array
-     */
-    protected function parserSearchData($search)
+    // add ->with(relations)
+    private function applyWith(): void
     {
-        $searchData = [];
+        if (!$this->with) return;
 
-        if (stripos($search, ':')) {
-            $fields = explode(';', $search);
-
-            foreach ($fields as $row) {
-                try {
-                    list($field, $value) = explode(':', $row);
-                    $searchData[$field] = $value;
-                } catch (Exception $e) {
-                    //Surround offset error
-                }
-            }
-        }
-
-        return $searchData;
+        $with = explode(';', $this->with);
+        $this->model = $this->model->with($with);
     }
 
-    /**
-     * @param $search
-     *
-     * @return null
-     */
-    protected function parserSearchValue($search)
+    // add ->withCount(relations)
+    private function applyWithCount(): void
     {
+        if (!$this->withCount) return;
 
-        if (stripos($search, ';') || stripos($search, ':')) {
-            $values = explode(';', $search);
-            foreach ($values as $value) {
-                $s = explode(':', $value);
-                if (count($s) == 1) {
-                    return $s[0];
-                }
-            }
-
-            return null;
-        }
-
-        return $search;
+        $withCount = explode(';', $this->withCount);
+        $this->model = $this->model->withCount($withCount);
     }
 
-    protected function parserFieldsSearch(array $fields = [], array $searchFields = null, array $dataKeys = null)
+    // add orderBy(orderColumn, orderDirection)
+    private function applyOrder(): void
     {
-        if (!is_null($searchFields) && count($searchFields)) {
-            $acceptedConditions = config('repository.criteria.acceptedConditions', [
-                '=',
-                'like'
-            ]);
-            $originalFields = $fields;
-            $fields = [];
+        if (!$this->sortColumn || !$this->sortDirection) return;
 
-            foreach ($searchFields as $index => $field) {
-                $field_parts = explode(':', $field);
-                $temporaryIndex = array_search($field_parts[0], $originalFields);
+        $this->model = $this->model->orderBy($this->sortColumn, $this->sortDirection);
+    }
 
-                if (count($field_parts) == 2) {
-                    if (in_array($field_parts[1], $acceptedConditions)) {
-                        unset($originalFields[$temporaryIndex]);
-                        $field = $field_parts[0];
-                        $condition = $field_parts[1];
-                        $originalFields[$field] = $condition;
-                        $searchFields[$index] = $field;
-                    }
+    // add ->select(columns)
+    private function applySelect(): void
+    {
+        if ($this->select === null) return;
+
+        $this->model->select($this->select);
+    }
+
+    private function applyFilters(): void
+    {
+        $this->model = $this->model->where(function ($query) {
+            /** @var Builder $query */
+
+            foreach ($this->filters as $filter) {
+                $field = $filter['field'];
+                $condition = $filter['condition'];
+                $value = $filter['value'];
+                $cast = $this->casts[$field] ?? null;
+
+                if ($condition === ConditionHelper::IS_EMPTY) {
+                    $query->whereNull($field);
+                } elseif ($condition === ConditionHelper::IS_NOT_EMPTY) {
+                    $query->whereNotNull($field);
+                } else {
+                    $query->where(
+                        $field,
+                        ConditionHelper::getMysqlCondition($condition),
+                        ConditionHelper::getValueByCondition($value, $condition, $cast)
+                    );
                 }
             }
+        });
+    }
 
-            if (!is_null($dataKeys) && count($dataKeys)) {
-                $searchFields = array_unique(array_merge($dataKeys, $searchFields));
-            }
+    private function applyLimit(): void
+    {
+        if (!$this->limit) return;
 
-            foreach ($originalFields as $field => $condition) {
-                if (is_numeric($field)) {
-                    $field = $condition;
-                    $condition = "=";
-                }
-                if (in_array($field, $searchFields)) {
-                    $fields[$field] = $condition;
-                }
-            }
-
-            if (count($fields) == 0) {
-                throw new Exception(trans('repository::criteria.fields_not_accepted', ['field' => implode(',', $searchFields)]));
-            }
-
-        }
-
-        return $fields;
+        $this->model = $this->model->limit($this->limit);
     }
 }

@@ -25,6 +25,7 @@ class RequestDatatableCriteria implements CriteriaInterface
     protected RepositoryInterface $repository;
     protected $builder;
     protected $model;
+    protected array $joinedTables = [];
 
     public function __construct(Request $request)
     {

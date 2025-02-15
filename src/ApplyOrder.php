@@ -2,9 +2,6 @@
 
 namespace Arendach\RequestDatatableCriteria;
 
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasOne;
-
 /** @mixin RequestDatatableCriteria */
 trait ApplyOrder
 {
@@ -33,29 +30,60 @@ trait ApplyOrder
      */
     private function applyRelationOrder(array $sortParts, string $direction): void
     {
-        $relation = $sortParts[0]; // Перше значення - це назва відносини (наприклад, 'author')
-        $column = end($sortParts); // Останнє значення - це поле для сортування (наприклад, 'name')
+        $relation = array_shift($sortParts); // Перше значення - це назва відносини (наприклад, 'author')
+        $column = array_pop($sortParts); // Останнє значення - це поле для сортування (наприклад, 'is_europe')
 
-        // Отримуємо визначення зв'язку в моделі
-        $relationInstance = $this->model->{$relation}();
-
-        if ($relationInstance instanceof BelongsTo) {
-            // Для зв'язків типу BelongsTo (наприклад, author.name)
-            $foreignKey = $relationInstance->getForeignKeyName(); // отримуємо поле зовнішнього ключа
-            $relatedTable = $relationInstance->getRelated()->getTable(); // отримуємо ім'я таблиці зв'язку
-
-            // Додаємо join для таблиці зв'язку
-            $this->builder = $this->builder
-                ->leftJoin($relatedTable, $this->model->getTable() . '.' . $foreignKey, '=', "$relatedTable.id")
-                ->orderBy("$relatedTable.$column", $direction);
-        } elseif ($relationInstance instanceof HasOne) {
-            // Для зв'язків типу HasOne (наприклад, profile.city)
-            $foreignKey = $relationInstance->getForeignKeyName();
-            $relatedTable = $relationInstance->getRelated()->getTable();
-
-            $this->builder = $this->builder
-                ->leftJoin($relatedTable, "$relatedTable.$foreignKey", '=', $this->model->getTable() . '.id')
-                ->orderBy("$relatedTable.$column", $direction);
+        if (!method_exists($this->builder->getModel(), $relation)) {
+            return; // Якщо зв’язок не знайдено - виходимо
         }
+
+        // Починаємо з першого рівня зв’язку
+        $relationInstance = $this->builder->getModel()->{$relation}();
+        $previousTable = $this->builder->getModel()->getTable();
+        $previousKey = $relationInstance->getForeignKeyName();
+        $relatedModel = $relationInstance->getRelated();
+        $relatedTable = $relatedModel->getTable();
+
+        // Якщо таблиця ще не приєднана, додаємо LEFT JOIN
+        if (!in_array($relatedTable, $this->joinedTables)) {
+            $this->builder = $this->builder->leftJoin(
+                $relatedTable,
+                "$previousTable.$previousKey",
+                '=',
+                "$relatedTable.id"
+            );
+            $this->joinedTables[] = $relatedTable;
+        }
+
+        // Обробка вкладених зв'язків (наприклад, author.country)
+        foreach ($sortParts as $nextRelation) {
+            if (!method_exists($relatedModel, $nextRelation)) {
+                return;
+            }
+
+            $relationInstance = $relatedModel->{$nextRelation}();
+            $relatedModel = $relationInstance->getRelated();
+            $nextTable = $relatedModel->getTable();
+            $nextKey = $relationInstance->getForeignKeyName();
+
+            if (!in_array($nextTable, $this->joinedTables)) {
+                $this->builder = $this->builder->leftJoin(
+                    $nextTable,
+                    "$relatedTable.$nextKey",
+                    '=',
+                    "$nextTable.id"
+                );
+                $this->joinedTables[] = $nextTable;
+            }
+
+            // Оновлюємо змінні
+            $previousTable = $nextTable;
+            $relatedTable = $nextTable;
+            $previousKey = $nextKey;
+        }
+
+        // Додаємо правильне сортування (по останньому рівню вкладеності)
+        $this->builder = $this->builder->orderBy("$relatedTable.$column", $direction);
     }
+
 }

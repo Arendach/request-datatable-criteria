@@ -16,10 +16,10 @@ class ConditionHelper
     const LESS_THAN_EQUAL = 'less_than_equal';
     const IS_EMPTY = 'is_empty';
     const IS_NOT_EMPTY = 'is_not_empty';
+    const BETWEEN = 'between';
+    const IN = 'in';
 
-    // const IN = 'in';
     // const NOT_IN = 'not_in';
-    // const BETWEEN = 'between';
     // const NOT_BETWEEN = 'not_between';
 
     public static function getValueByCondition($value, $condition, ?string $cast = null): mixed
@@ -30,10 +30,6 @@ class ConditionHelper
             self::CONTAIN, self::NOT_CONTAIN => "%$value%",
             self::START_WITH                 => "$value%",
             self::END_WITH                   => "%$value",
-            self::GREATER_THAN,
-            self::GREATER_THAN_EQUAL,
-            self::LESS_THAN,
-            self::LESS_THAN_EQUAL            => (int)$value,
             default                          => $value,
         };
     }

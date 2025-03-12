@@ -37,7 +37,7 @@ class RequestDatatableCriteria implements CriteriaInterface
     {
         $this->repository = $repository;
         $this->model = $model->getModel();
-        $this->builder = $model;
+        $this->builder = $model->query();
 
         $this->applySearch();
         $this->applyWith();

@@ -24,27 +24,35 @@ class ConditionHelper
 
     public static function getValueByCondition($value, $condition, ?string $cast = null): mixed
     {
+        if (in_array($condition, [self::IN, /*self::NOT_IN*/])) {
+            if (is_string($value)) {
+                return explode(',', $value);
+            }
+
+            return $value;
+        }
+
         $value = self::getValueByCast($value, $cast);
 
         return match ($condition) {
             self::CONTAIN, self::NOT_CONTAIN => "%$value%",
-            self::START_WITH                 => "$value%",
-            self::END_WITH                   => "%$value",
-            default                          => $value,
+            self::START_WITH => "$value%",
+            self::END_WITH => "%$value",
+            default => $value,
         };
     }
 
     public static function getMysqlCondition($condition): string
     {
         return match ($condition) {
-            self::EQUAL                                     => '=',
-            self::NOT_EQUAL                                 => '!=',
+            self::EQUAL => '=',
+            self::NOT_EQUAL => '!=',
             self::CONTAIN, self::START_WITH, self::END_WITH => 'like',
-            self::NOT_CONTAIN                               => 'not like',
-            self::GREATER_THAN                              => '>',
-            self::GREATER_THAN_EQUAL                        => '>=',
-            self::LESS_THAN                                 => '<',
-            self::LESS_THAN_EQUAL                           => '<=',
+            self::NOT_CONTAIN => 'not like',
+            self::GREATER_THAN => '>',
+            self::GREATER_THAN_EQUAL => '>=',
+            self::LESS_THAN => '<',
+            self::LESS_THAN_EQUAL => '<=',
         };
     }
 
@@ -52,21 +60,21 @@ class ConditionHelper
     {
         if ($cast === 'bool' || $cast === 'boolean') {
             return match ($value) {
-                'true', 'on', '1', 1, true    => true,
+                'true', 'on', '1', 1, true => true,
                 'false', 'off', '0', 0, false => false,
             };
         }
 
         if ($cast === 'int') {
-            return (int)$value;
+            return (int) $value;
         }
 
         if ($cast === 'float') {
-            return (float)$value;
+            return (float) $value;
         }
 
         if ($cast === 'string') {
-            return (string)$value;
+            return (string) $value;
         }
 
         return $value;
